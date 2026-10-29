@@ -5,6 +5,8 @@ the next. So when the two letters turn by different angles, the stroke splits: a
 overlap on the inside. Bending the whole run instead keeps joins closed, but stretches every letter on the outside of a
 bend and squashes it on the inside. text_on_path keeps letters rigid and bends only the rows they join on.
 
+![Each letter turned whole splits the headline; the whole line bent stretches the letters; only the joining rows bent keeps both](images/schematic.png)
+
 1. **Shape once.** Flutter's paragraph engine shapes the whole run, so every script comes out right: Arabic joining
    forms, Indic conjuncts and vowel signs, Nastaliq's slope.
 2. **Draw each cluster alone.** Each grapheme cluster is drawn with the rest of the run transparent, so it keeps its
@@ -27,15 +29,6 @@ run on from cluster to cluster. The rest of each cluster's grid stays straight a
 A pointer is carried back to the straight line the text was shaped as, and the paragraph finds the position there. That
 way right-to-left text, clusters and words come out right. The highlight bends with the curve, and the handles turn
 with it.
-
-## Vectors
-
-```dart
-final shaped = await ShapedText.layout('शिरोरेखा जुड़ी रहती है', style);
-final outlines = await TextOutlines.trace(shaped);
-final placement = TextOnPathPlacement(shaped, curve);
-final svg = placement.toSvg(outlines); // or placement.toPdf(outlines), placement.outlinePaths(outlines)
-```
 
 ## How well it works
 
@@ -67,3 +60,5 @@ The inside of a bend, an S-curve and seals are in [measurements.md](measurements
 - **Kashida.** It draws a join out with the stroke's own cross-section, rather than inserting U+0640 and shaping again.
   A font's special kashida forms don't appear.
 - **Joining rows.** They're found from the run's pixels; `connection: ConnectionLine.between(...)` sets them by hand.
+
+To use it, see [Getting started](getting_started.md).
