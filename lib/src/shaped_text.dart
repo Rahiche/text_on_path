@@ -21,6 +21,7 @@ class ShapedText {
     required this.height,
     required this.baseline,
     required this.units,
+    required this.paragraph,
     required this.neighbours,
     required this.atlas,
     required this.band,
@@ -80,6 +81,7 @@ class ShapedText {
           height: height,
           baseline: baseline,
           units: units,
+          paragraph: full,
           neighbours: const [],
           atlas: TextAtlas._(
             atlas.image,
@@ -110,6 +112,9 @@ class ShapedText {
 
   /// The flat run's width, height and baseline.
   final double width, height, baseline;
+
+  /// The run, laid out straight: for finding positions and words in it, as selection does.
+  final ui.Paragraph paragraph;
 
   /// The run's clusters with ink, left to right as they're seen.
   final List<TextUnit> units;
@@ -225,8 +230,11 @@ class ShapedText {
     }
   }
 
-  /// Frees the atlas.
-  void dispose() => atlas.dispose();
+  /// Frees the atlas and the paragraph.
+  void dispose() {
+    atlas.dispose();
+    paragraph.dispose();
+  }
 
   /// [text] laid out again with only [range] visible: the rest of the run transparent, so the visible part keeps the
   /// shape and place the whole run gives it.
@@ -313,6 +321,7 @@ class ShapedText {
       height: height,
       baseline: baseline,
       units: units,
+      paragraph: paragraph,
       neighbours: result,
       atlas: atlas,
       band: band,

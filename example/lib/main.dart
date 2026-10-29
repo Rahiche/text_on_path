@@ -11,6 +11,7 @@ import 'draw.dart';
 import 'panel.dart';
 import 'platform_io.dart' if (dart.library.js_interop) 'platform_web.dart' as platform;
 import 'seal.dart';
+import 'select.dart';
 import 'zoom.dart';
 
 /// With `--dart-define=CAPTURE=true` (not on the web), the app saves each tab as a PNG in its temporary directory and
@@ -45,7 +46,7 @@ class _Home extends StatefulWidget {
 }
 
 class _HomeState extends State<_Home> with SingleTickerProviderStateMixin {
-  static const _pages = ['Bend', 'Compare', 'Draw', 'Seals', 'Zoom'];
+  static const _pages = ['Bend', 'Compare', 'Draw', 'Seals', 'Zoom', 'Select'];
   late final _tabs = TabController(length: _pages.length, vsync: this);
   final _boundary = GlobalKey();
 
@@ -70,7 +71,7 @@ class _HomeState extends State<_Home> with SingleTickerProviderStateMixin {
     await save('compare');
     compareScroll.jumpTo(compareScroll.position.maxScrollExtent);
     await save('compare_end');
-    for (final (i, name) in [(2, 'draw'), (3, 'seals'), (4, 'zoom')]) {
+    for (final (i, name) in [(2, 'draw'), (3, 'seals'), (5, 'select'), (4, 'zoom')]) {
       _tabs.index = i;
       await save(name);
     }
@@ -131,7 +132,7 @@ class _HomeState extends State<_Home> with SingleTickerProviderStateMixin {
                 child: TabBarView(
                   controller: _tabs,
                   physics: const NeverScrollableScrollPhysics(),
-                  children: const [BendPage(), ComparePage(), DrawPage(), SealPage(), ZoomPage()],
+                  children: const [BendPage(), ComparePage(), DrawPage(), SealPage(), ZoomPage(), SelectPage()],
                 ),
               ),
             ],

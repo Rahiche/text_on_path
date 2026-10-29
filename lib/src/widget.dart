@@ -1,5 +1,8 @@
 import 'dart:math' as math;
 
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -235,6 +238,8 @@ class _TextOnPathState extends State<TextOnPath> {
       devicePixelRatio: MediaQuery.maybeDevicePixelRatioOf(context) ?? 1,
       showMesh: widget.showMesh,
       onShownAt: _shownAt,
+      registrar: SelectionContainer.maybeOf(context),
+      selectionColor: DefaultSelectionStyle.of(context).selectionColor,
     );
   }
 }
@@ -247,6 +252,8 @@ class _TextOnPathPaint extends LeafRenderObjectWidget {
     required this.devicePixelRatio,
     required this.showMesh,
     required this.onShownAt,
+    required this.registrar,
+    required this.selectionColor,
   });
 
   final TextOnPathPlacement placement;
@@ -255,6 +262,8 @@ class _TextOnPathPaint extends LeafRenderObjectWidget {
   final double devicePixelRatio;
   final bool showMesh;
   final ValueChanged<double> onShownAt;
+  final SelectionRegistrar? registrar;
+  final Color? selectionColor;
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderTextOnPath(
@@ -264,7 +273,8 @@ class _TextOnPathPaint extends LeafRenderObjectWidget {
         devicePixelRatio,
         showMesh,
         onShownAt,
-      );
+        selectionColor,
+      )..registrar = registrar;
 
   @override
   void updateRenderObject(BuildContext context, _RenderTextOnPath renderObject) {
@@ -274,7 +284,9 @@ class _TextOnPathPaint extends LeafRenderObjectWidget {
       ..outlines = outlines
       ..devicePixelRatio = devicePixelRatio
       ..showMesh = showMesh
-      ..onShownAt = onShownAt;
+      ..onShownAt = onShownAt
+      ..registrar = registrar
+      ..selectionColor = selectionColor;
   }
 }
 
@@ -286,12 +298,19 @@ class _RenderTextOnPath extends RenderBox {
     this._devicePixelRatio,
     this._showMesh,
     this.onShownAt,
+    this._selectionColor,
   );
 
   TextOnPathPlacement _placement;
   set placement(TextOnPathPlacement value) {
+    final sameText = value.text == _placement.text;
     _placement = value;
     markNeedsPaint();
+    if (sameText) {
+      _selectable?.placementChanged();
+    } else {
+      _updateSelectable();
+    }
   }
 
   TextAtlas? _atlas;
@@ -322,8 +341,67 @@ class _RenderTextOnPath extends RenderBox {
     markNeedsPaint();
   }
 
+  Color? _selectionColor;
+  set selectionColor(Color? value) {
+    if (value == _selectionColor) return;
+    _selectionColor = value;
+    if (_selectable?.hasSelection ?? false) markNeedsPaint();
+  }
+
   ValueChanged<double> onShownAt;
   double? _reported;
+
+  // Selection: one selectable for the shaped text, registered while there's a registrar to take it.
+  SelectionRegistrar? _registrar;
+  set registrar(SelectionRegistrar? value) {
+    if (value == _registrar) return;
+    _registrar = value;
+    _updateSelectable();
+  }
+
+  _CurvedSelectable? _selectable;
+
+  void _updateSelectable() {
+    if (_registrar == null || !attached) {
+      _removeSelectable();
+      return;
+    }
+    if (_selectable?.text == _placement.text) return;
+    _removeSelectable();
+    _selectable = _CurvedSelectable(this, _placement.text)..registrar = _registrar;
+    markNeedsCompositingBitsUpdate();
+  }
+
+  void _removeSelectable() {
+    final selectable = _selectable;
+    if (selectable == null) return;
+    _selectable = null;
+    selectable
+      ..registrar = null
+      ..dispose();
+    markNeedsCompositingBitsUpdate();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _updateSelectable();
+  }
+
+  @override
+  void detach() {
+    _removeSelectable();
+    super.detach();
+  }
+
+  @override
+  void dispose() {
+    _removeSelectable();
+    super.dispose();
+  }
+
+  @override
+  bool get alwaysNeedsCompositing => _selectable?.hasHandles ?? false;
 
   @override
   bool get sizedByParent => true;
@@ -344,6 +422,13 @@ class _RenderTextOnPath extends RenderBox {
     final canvas = context.canvas
       ..save()
       ..translate(offset.dx, offset.dy);
+    final selectable = _selectable, colour = _selectionColor;
+    if (selectable != null && colour != null) {
+      final paint = Paint()..color = colour;
+      for (final band in selectable.highlight()) {
+        canvas.drawPath(Path()..addPolygon(band, true), paint);
+      }
+    }
     final outlines = _outlines;
     if (outlines != null) {
       _placement.paintOutlines(canvas, outlines);
@@ -360,5 +445,319 @@ class _RenderTextOnPath extends RenderBox {
       );
     }
     canvas.restore();
+    selectable?.paintHandles(context, offset);
+  }
+}
+
+/// The curved text as one [Selectable]: a pointer is carried back to the straight line, where the paragraph finds
+/// the position, the word, the direction; the highlight is drawn along the curve, and the handles turned to it.
+class _CurvedSelectable with ChangeNotifier, Selectable, SelectionRegistrant {
+  _CurvedSelectable(this._box, this.text);
+
+  final _RenderTextOnPath _box;
+
+  /// The text it selects in.
+  final ShapedText text;
+
+  TextPosition? _start, _end;
+  LayerLink? _startHandle, _endHandle;
+  // The curve's direction at each handle, to turn it by.
+  Offset _startTangent = const Offset(1, 0), _endTangent = const Offset(1, 0);
+  SelectionGeometry _geometry = const SelectionGeometry(status: SelectionStatus.none, hasContent: true);
+
+  TextOnPathPlacement get _placement => _box._placement;
+  ui.Paragraph get _paragraph => text.paragraph;
+  int get _length => text.text.length;
+
+  bool get hasSelection => _start != null && _end != null && _start!.offset != _end!.offset;
+  bool get hasHandles => _startHandle != null || _endHandle != null;
+
+  @override
+  SelectionGeometry get value => _geometry;
+
+  /// The curve moved: the selection keeps its place in the text and is drawn where the text now is.
+  void placementChanged() {
+    // Not while a frame is being built: listeners may rebuild.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (_box._selectable == this) _updateGeometry();
+    });
+  }
+
+  void _updateGeometry() {
+    final next = _computeGeometry();
+    if (next == _geometry) return;
+    _geometry = next;
+    notifyListeners();
+  }
+
+  SelectionGeometry _computeGeometry() {
+    final start = _start, end = _end;
+    if (start == null || end == null) {
+      return const SelectionGeometry(status: SelectionStatus.none, hasContent: true);
+    }
+    final collapsed = start.offset == end.offset;
+    final flip = (start.offset > end.offset) != (text.textDirection == TextDirection.rtl);
+    final (startType, endType) = collapsed
+        ? (TextSelectionHandleType.collapsed, TextSelectionHandleType.collapsed)
+        : (flip
+            ? (TextSelectionHandleType.right, TextSelectionHandleType.left)
+            : (TextSelectionHandleType.left, TextSelectionHandleType.right));
+    final (startPoint, startTangent) = _edge(start);
+    final (endPoint, endTangent) = collapsed ? (startPoint, startTangent) : _edge(end);
+    _startTangent = startTangent;
+    _endTangent = endTangent;
+    final lineHeight = _paragraph.height;
+    return SelectionGeometry(
+      startSelectionPoint: SelectionPoint(localPosition: startPoint, lineHeight: lineHeight, handleType: startType),
+      endSelectionPoint: SelectionPoint(localPosition: endPoint, lineHeight: lineHeight, handleType: endType),
+      selectionRects: [for (final band in highlight()) _boundsOf(band)],
+      status: collapsed ? SelectionStatus.collapsed : SelectionStatus.uncollapsed,
+      hasContent: true,
+    );
+  }
+
+  static Rect _boundsOf(List<Offset> points) {
+    var box = Rect.fromPoints(points.first, points.first);
+    for (final p in points.skip(1)) {
+      box = box.expandToInclude(Rect.fromPoints(p, p));
+    }
+    return box;
+  }
+
+  /// Where the caret for [position] stands on the curve, at the foot of the line, and the curve's direction there.
+  (Offset, Offset) _edge(TextPosition position) => _placement.bandPoint(_caretX(position), _paragraph.height);
+
+  /// The caret's column for [position] in the straight line: before the cluster that starts there, or after the one
+  /// that ends there, whichever way it runs.
+  double _caretX(TextPosition position) {
+    if (position.offset < _length) {
+      final glyph = _paragraph.getGlyphInfoAt(position.offset);
+      if (glyph != null) {
+        final b = glyph.graphemeClusterLayoutBounds;
+        return glyph.writingDirection == TextDirection.rtl ? b.right : b.left;
+      }
+    }
+    if (position.offset > 0) {
+      final glyph = _paragraph.getGlyphInfoAt(position.offset - 1);
+      if (glyph != null) {
+        final b = glyph.graphemeClusterLayoutBounds;
+        return glyph.writingDirection == TextDirection.rtl ? b.left : b.right;
+      }
+    }
+    return 0;
+  }
+
+  /// The selection's highlight: for each box the straight line gives the selected range (more than one where
+  /// directions mix), a band along the curve.
+  List<List<Offset>> highlight() {
+    final start = _start, end = _end;
+    if (start == null || end == null || start.offset == end.offset) return const [];
+    final boxes = _paragraph.getBoxesForRange(math.min(start.offset, end.offset), math.max(start.offset, end.offset));
+    return [for (final b in boxes) _placement.band(b.left, b.right, b.top, b.bottom)];
+  }
+
+  /// The text position nearest the local [point].
+  TextPosition _positionAt(Offset point) {
+    final flat = _placement.toFlat(point);
+    return _paragraph.getPositionForOffset(Offset(flat.dx, flat.dy.clamp(0.0, _paragraph.height)));
+  }
+
+  Rect get _area => _placement.bounds.inflate(0.25 * text.fontSize);
+
+  @override
+  SelectionResult dispatchSelectionEvent(SelectionEvent event) {
+    final start = _start, end = _end;
+    final SelectionResult result;
+    switch (event.type) {
+      case SelectionEventType.startEdgeUpdate:
+      case SelectionEventType.endEdgeUpdate:
+        final edge = event as SelectionEdgeUpdateEvent;
+        result = _moveEdge(
+          edge.globalPosition,
+          isEnd: event.type == SelectionEventType.endEdgeUpdate,
+          byWord: edge.granularity == TextGranularity.word,
+        );
+      case SelectionEventType.clear:
+        _start = _end = null;
+        result = SelectionResult.none;
+      case SelectionEventType.selectAll:
+        _selectAll();
+        result = SelectionResult.none;
+      case SelectionEventType.selectWord:
+        result = _selectWord((event as SelectWordSelectionEvent).globalPosition);
+      case SelectionEventType.selectParagraph:
+        final paragraph = event as SelectParagraphSelectionEvent;
+        _selectAll();
+        result = paragraph.absorb ? SelectionResult.next : SelectionResult.end;
+      case SelectionEventType.granularlyExtendSelection:
+        result = _extend(event as GranularlyExtendSelectionEvent);
+      case SelectionEventType.directionallyExtendSelection:
+        final extend = event as DirectionallyExtendSelectionEvent;
+        final forward = switch (extend.direction) {
+          SelectionExtendDirection.nextLine || SelectionExtendDirection.forward => true,
+          SelectionExtendDirection.previousLine || SelectionExtendDirection.backward => false,
+        };
+        _ensureSelection(forward);
+        _setEdge(TextPosition(offset: forward ? _length : 0), isEnd: extend.isEnd);
+        result = forward ? SelectionResult.next : SelectionResult.previous;
+    }
+    if (start != _start || end != _end) {
+      _box.markNeedsPaint();
+      _updateGeometry();
+    }
+    return result;
+  }
+
+  void _setEdge(TextPosition position, {required bool isEnd}) {
+    if (isEnd) {
+      _end = position;
+    } else {
+      _start = position;
+    }
+  }
+
+  void _selectAll() {
+    _start = const TextPosition(offset: 0);
+    _end = TextPosition(offset: _length, affinity: TextAffinity.upstream);
+  }
+
+  void _ensureSelection(bool forward) {
+    if (_start != null && _end != null) return;
+    _start = _end = TextPosition(offset: forward ? 0 : _length);
+  }
+
+  SelectionResult _moveEdge(Offset global, {required bool isEnd, required bool byWord}) {
+    final local = _box.globalToLocal(global);
+    var position = _positionAt(local);
+    if (byWord) {
+      final word = _paragraph.getWordBoundary(position);
+      final other = isEnd ? _start : _end;
+      // Take in the whole word on the side away from the edge that stays put.
+      position = other == null || position.offset >= other.offset
+          ? TextPosition(offset: word.end, affinity: TextAffinity.upstream)
+          : TextPosition(offset: word.start);
+    }
+    _setEdge(position, isEnd: isEnd);
+    if (position.offset >= _length) return SelectionResult.next;
+    if (position.offset <= 0) return SelectionResult.previous;
+    return SelectionUtils.getResultBasedOnRect(_area, local);
+  }
+
+  SelectionResult _selectWord(Offset global) {
+    final local = _box.globalToLocal(global);
+    if (!_area.contains(local)) return SelectionUtils.getResultBasedOnRect(_area, local);
+    final word = _paragraph.getWordBoundary(_positionAt(local));
+    _start = TextPosition(offset: word.start);
+    _end = TextPosition(offset: word.end, affinity: TextAffinity.upstream);
+    return SelectionResult.end;
+  }
+
+  SelectionResult _extend(GranularlyExtendSelectionEvent event) {
+    _ensureSelection(event.forward);
+    final from = (event.isEnd ? _end : _start)!.offset;
+    final to = switch (event.granularity) {
+      TextGranularity.character => event.forward ? _nextCluster(from) : _previousCluster(from),
+      TextGranularity.word => event.forward ? _nextWordEnd(from) : _previousWordStart(from),
+      TextGranularity.line || TextGranularity.paragraph || TextGranularity.document => event.forward ? _length : 0,
+    };
+    _setEdge(TextPosition(offset: to), isEnd: event.isEnd);
+    if (event.forward && to >= _length) return SelectionResult.next;
+    if (!event.forward && to <= 0) return SelectionResult.previous;
+    return SelectionResult.end;
+  }
+
+  int _nextCluster(int offset) {
+    if (offset >= _length) return _length;
+    return _paragraph.getGlyphInfoAt(offset)?.graphemeClusterCodeUnitRange.end ?? offset + 1;
+  }
+
+  int _previousCluster(int offset) {
+    if (offset <= 0) return 0;
+    return _paragraph.getGlyphInfoAt(offset - 1)?.graphemeClusterCodeUnitRange.start ?? offset - 1;
+  }
+
+  int _nextWordEnd(int offset) {
+    var at = offset;
+    while (at < _length) {
+      final word = _paragraph.getWordBoundary(TextPosition(offset: at));
+      if (word.end > offset && text.text.substring(at, word.end).trim().isNotEmpty) return word.end;
+      at = math.max(word.end, at + 1);
+    }
+    return _length;
+  }
+
+  int _previousWordStart(int offset) {
+    var at = offset;
+    while (at > 0) {
+      final word = _paragraph.getWordBoundary(TextPosition(offset: at - 1));
+      if (word.start < offset && text.text.substring(word.start, at).trim().isNotEmpty) return word.start;
+      at = math.min(word.start, at - 1);
+    }
+    return 0;
+  }
+
+  @override
+  SelectedContent? getSelectedContent() {
+    final start = _start, end = _end;
+    if (start == null || end == null) return null;
+    return SelectedContent(
+      plainText: text.text.substring(math.min(start.offset, end.offset), math.max(start.offset, end.offset)),
+    );
+  }
+
+  @override
+  SelectedContentRange? getSelection() {
+    final start = _start, end = _end;
+    if (start == null || end == null) return null;
+    return SelectedContentRange(startOffset: start.offset, endOffset: end.offset);
+  }
+
+  @override
+  int get contentLength => _length;
+
+  @override
+  Matrix4 getTransformTo(RenderObject? ancestor) => _box.getTransformTo(ancestor);
+
+  @override
+  Size get size => _box.size;
+
+  @override
+  List<Rect> get boundingBoxes => [
+        for (final r in _placement.clusterBounds)
+          if (!r.isEmpty) r
+      ];
+
+  @override
+  void pushHandleLayers(LayerLink? startHandle, LayerLink? endHandle) {
+    if (!_box.attached) {
+      // Only clearing up after the box has gone.
+      _startHandle = startHandle;
+      _endHandle = endHandle;
+      return;
+    }
+    if (startHandle == _startHandle && endHandle == _endHandle) return;
+    final had = hasHandles;
+    _startHandle = startHandle;
+    _endHandle = endHandle;
+    if (had != hasHandles) _box.markNeedsCompositingBitsUpdate();
+    _box.markNeedsPaint();
+  }
+
+  /// Puts the handles' leaders at the selection's ends, turned to the curve, so the handles follow it.
+  void paintHandles(PaintingContext context, Offset offset) {
+    for (final (link, point, tangent) in [
+      (_startHandle, _geometry.startSelectionPoint, _startTangent),
+      (_endHandle, _geometry.endSelectionPoint, _endTangent),
+    ]) {
+      if (link == null || point == null) continue;
+      final at = point.localPosition;
+      // Turned about the handle's point: in columns, a rotation and the shift that keeps the point in place.
+      final angle = math.atan2(tangent.dy, tangent.dx), c = math.cos(angle), sn = math.sin(angle);
+      final turn = Matrix4(
+          c, sn, 0, 0, -sn, c, 0, 0, 0, 0, 1, 0, at.dx - c * at.dx + sn * at.dy, at.dy - sn * at.dx - c * at.dy, 0, 1);
+      context.pushTransform(true, offset, turn, (context, offset) {
+        context.pushLayer(LeaderLayer(link: link, offset: offset + at), (context, offset) {}, Offset.zero);
+      });
+    }
   }
 }

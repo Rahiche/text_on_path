@@ -70,6 +70,27 @@ curve, as a fraction of its length.
   `Transform` or `InteractiveViewer` above it, times the screen's pixel ratio), and from traced outlines past a memory
   budget. `rendering: TextOnPathRendering.vector` always uses outlines.
 
+### Selection
+
+Inside a `SelectionArea`, curved text selects like any other: drag across it, double-click a word, long-press on a
+phone for handles, and copy. A pointer is carried back to the straight line the text was shaped as, and the paragraph
+finds the position there, so right-to-left text, clusters and words come out right. The highlight bends with the curve,
+and the handles turn with it.
+
+```dart
+SelectionArea(
+  child: TextOnPath('الحروف تبقى متصلة', curve: curve, style: style),
+)
+```
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/selection_arabic.png" alt="Arabic on an arc: a drag selects from the right, where it starts, into the second word; a long press selects تبقى with two handles turned to the curve" width="720">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/selection_hindi.png" alt="Hindi on an arc: a drag selects from the start into the second word; a long press selects जुड़ी with two handles" width="720">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/selection_latin_script.png" alt="A Latin script hand on an arc: a drag selects Handwriting st; a long press selects stays with two handles" width="720">
+</p>
+
+*Left, a mouse drag from the start of the text; right, a long press on a word, with handles.*
+
 ### As vectors: SVG and PDF
 
 ```dart
@@ -132,7 +153,7 @@ in [doc/sharpness.md](https://github.com/Rahiche/text_on_path/blob/main/doc/shar
 
 `example/` is the [gallery](https://rahiche.github.io/text_on_path/), and runs on the desktop and phones too. It shows Arabic, Persian, Urdu, Hindi, Bengali and a Latin script hand on a circle and an S-curve, rigid
 placement beside joined, measured, with a loupe on the join rigid placement opens widest; seals fitted by kashida,
-tracking or word spacing; and a zoomable view that saves SVG and PDF. Its fonts are bundled under the SIL Open Font
+tracking or word spacing; a zoomable view that saves SVG and PDF; and selection. Its fonts are bundled under the SIL Open Font
 License.
 
 ## Limits

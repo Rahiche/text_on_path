@@ -485,6 +485,172 @@ class TextOnPathPlacement {
     return a + (d - a) * (fy - fx) + (e - a) * fx;
   }
 
+  // Each cluster's grid as drawn: its vertices' places, and the box round them.
+  late final List<Float64List> _drawnGrids = [
+    for (var i = 0; i < text.units.length; i++)
+      () {
+        final (xs, ys) = _grids[i];
+        final out = Float64List(2 * xs.length * ys.length), p = Float64List(2);
+        var k = 0;
+        for (final y in ys) {
+          for (final x in xs) {
+            _map(i, x, y, p);
+            out[k++] = p[0];
+            out[k++] = p[1];
+          }
+        }
+        return out;
+      }(),
+  ];
+
+  /// Where each cluster is drawn: the box round its mesh, in this placement's coordinates.
+  late final List<Rect> clusterBounds = [
+    for (var i = 0; i < text.units.length; i++)
+      () {
+        if (text.units[i].ink.isEmpty) return Rect.zero;
+        final g = _drawnGrids[i];
+        var l = double.infinity, t = double.infinity, r = -double.infinity, b = -double.infinity;
+        for (var k = 0; k < g.length; k += 2) {
+          l = math.min(l, g[k]);
+          r = math.max(r, g[k]);
+          t = math.min(t, g[k + 1]);
+          b = math.max(b, g[k + 1]);
+        }
+        return Rect.fromLTRB(l, t, r, b);
+      }(),
+  ];
+
+  /// Where the whole text is drawn.
+  late final Rect bounds = clusterBounds.where((r) => !r.isEmpty).fold<Rect?>(
+            null,
+            (box, r) => box == null ? r : box.expandToInclude(r),
+          ) ??
+      Rect.zero;
+
+  /// The point of the flat run that this placement draws at [point]: inside the text, from the mesh triangle it
+  /// falls in; elsewhere, from how far along the joining rows' curve it is and how far off it.
+  Offset toFlat(Offset point) {
+    for (var i = 0; i < text.units.length; i++) {
+      if (text.units[i].ink.isEmpty || !clusterBounds[i].contains(point)) continue;
+      final hit = _unmapGrid(i, point);
+      if (hit != null) return hit;
+    }
+    return _unmapCurve(point);
+  }
+
+  Offset? _unmapGrid(int i, Offset q) {
+    final (xs, ys) = _grids[i];
+    final g = _drawnGrids[i];
+    final nx = xs.length;
+    for (var r = 0; r + 1 < ys.length; r++) {
+      for (var c = 0; c + 1 < nx; c++) {
+        final a = r * nx + c, b = a + 1, d = a + nx, e = d + 1;
+        // The cell's two triangles, as drawn.
+        for (final (p, u, v) in [(a, b, e), (a, e, d)]) {
+          final x0 = g[2 * p], y0 = g[2 * p + 1];
+          final x1 = g[2 * u] - x0, y1 = g[2 * u + 1] - y0, x2 = g[2 * v] - x0, y2 = g[2 * v + 1] - y0;
+          final det = x1 * y2 - x2 * y1;
+          if (det.abs() < 1e-9) continue;
+          final qx = q.dx - x0, qy = q.dy - y0;
+          final w1 = (qx * y2 - x2 * qy) / det, w2 = (x1 * qy - qx * y1) / det;
+          if (w1 < -1e-6 || w2 < -1e-6 || w1 + w2 > 1 + 1e-6) continue;
+          Offset flat(int k) => Offset(xs[k % nx], ys[k ~/ nx]);
+          return flat(p) + (flat(u) - flat(p)) * w1 + (flat(v) - flat(p)) * w2;
+        }
+      }
+    }
+    return null;
+  }
+
+  Offset _unmapCurve(Offset q) {
+    final track = _join;
+    var best = 0, nearest = double.infinity;
+    for (var k = 0; k < track.x.length; k++) {
+      final d = (track.x[k] - q.dx) * (track.x[k] - q.dx) + (track.y[k] - q.dy) * (track.y[k] - q.dy);
+      if (d < nearest) {
+        nearest = d;
+        best = k;
+      }
+    }
+    // Onto the segment either side of the nearest sample.
+    var along = track.s[best];
+    for (final k in [best - 1, best]) {
+      if (k < 0 || k + 1 >= track.x.length) continue;
+      final ax = track.x[k], ay = track.y[k], bx = track.x[k + 1], by = track.y[k + 1];
+      final len2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+      if (len2 == 0) continue;
+      final t = (((q.dx - ax) * (bx - ax) + (q.dy - ay) * (by - ay)) / len2).clamp(0.0, 1.0);
+      final px = ax + t * (bx - ax), py = ay + t * (by - ay);
+      if ((px - q.dx) * (px - q.dx) + (py - q.dy) * (py - q.dy) <= nearest + 1e-9) {
+        along = track.s[k] + t * (track.s[k + 1] - track.s[k]);
+      }
+    }
+    // On a closed curve, the lap nearest the text.
+    if (track.closed && _lambda.isNotEmpty) {
+      final middle = (_lambda.first + _lambda.last) / 2, lap = track.length;
+      along += ((middle - along) / lap).round() * lap;
+    }
+    track.eval(along, _frame);
+    // How far off the curve, on the side the text stands on.
+    final up = (q.dx - _frame[0]) * _frame[3] - (q.dy - _frame[1]) * _frame[2];
+    return Offset(_flatAlong(along), text.baseline - _hc - up);
+  }
+
+  /// How far along the joining rows' curve the flat column [x] lands: exactly as drawn inside each cluster's box,
+  /// and evenly across the gaps and bridges between them.
+  double alongJoin(double x) {
+    final units = text.units;
+    if (units.isEmpty) return x;
+    double inside(int i, double at) => _lambda[i] + (at - units[i].anchor);
+    if (x <= units.first.box.left) return inside(0, x);
+    for (var i = 0; i < units.length; i++) {
+      final box = units[i].box;
+      if (x <= box.right) return inside(i, x);
+      if (i + 1 < units.length && x < units[i + 1].box.left) {
+        final from = inside(i, box.right), to = inside(i + 1, units[i + 1].box.left);
+        return from + (to - from) * (x - box.right) / (units[i + 1].box.left - box.right);
+      }
+    }
+    return inside(units.length - 1, x);
+  }
+
+  /// The flat column that lands [along] the joining rows' curve: [alongJoin] backwards.
+  double _flatAlong(double along) {
+    final units = text.units;
+    if (units.isEmpty) return along;
+    double flat(int i) => units[i].anchor + (along - _lambda[i]);
+    if (along <= alongJoin(units.first.box.left)) return flat(0);
+    for (var i = 0; i < units.length; i++) {
+      final box = units[i].box;
+      final end = alongJoin(box.right);
+      if (along <= end) return flat(i);
+      if (i + 1 < units.length) {
+        final next = alongJoin(units[i + 1].box.left);
+        if (along < next) return box.right + (units[i + 1].box.left - box.right) * (along - end) / (next - end);
+      }
+    }
+    return flat(units.length - 1);
+  }
+
+  /// The flat run's columns [x0] to [x1], rows [top] to [bottom], as drawn along the joining rows' curve: a band that
+  /// bends with the text, for a selection's highlight. Its top edge, then its bottom edge back.
+  List<Offset> band(double x0, double x1, double top, double bottom, {double step = 2}) {
+    final a = alongJoin(math.min(x0, x1)), b = alongJoin(math.max(x0, x1));
+    final n = math.max(2, ((b - a) / step).ceil() + 1);
+    return [
+      for (var k = 0; k < n; k++) _onJoin(a + (b - a) * k / (n - 1), top),
+      for (var k = n - 1; k >= 0; k--) _onJoin(a + (b - a) * k / (n - 1), bottom),
+    ];
+  }
+
+  /// The flat point ([x], [y]) as drawn along the joining rows' curve, and the curve's direction there.
+  (Offset, Offset) bandPoint(double x, double y) {
+    final along = alongJoin(x);
+    final point = _onJoin(along, y);
+    _join.eval(along, _frame);
+    return (point, Offset(_frame[2], _frame[3]));
+  }
+
   /// Where the drawn text puts a join's boundary at the flat row [y], as pairs of copies that should meet: the left
   /// cluster's and the right one's or, where the join is bridged, the left cluster's and the bridge's start, then the
   /// bridge's end and the right cluster's.
