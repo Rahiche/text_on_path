@@ -184,19 +184,28 @@ class _TextOnPathState extends State<TextOnPath> {
     }
     _drawing = want;
     final generation = _generation;
-    shaped.drawAtlas(want).then((atlas) {
-      if (!mounted || generation != _generation || _drawing != want) {
-        atlas.dispose();
-        return;
-      }
-      setState(() {
-        final old = _atlas;
-        _atlas = atlas;
+    shaped.drawAtlas(want).then(
+      (atlas) {
+        if (!mounted || generation != _generation || _drawing != want) {
+          atlas.dispose();
+          return;
+        }
+        setState(() {
+          final old = _atlas;
+          _atlas = atlas;
+          _drawing = null;
+          // The frame being built still paints the old one.
+          SchedulerBinding.instance.addPostFrameCallback((_) => old?.dispose());
+        });
+      },
+      // An atlas that wouldn't fit one texture: its outlines instead.
+      onError: (Object _) {
+        if (!mounted || generation != _generation || _drawing != want) return;
         _drawing = null;
-        // The frame being built still paints the old one.
-        SchedulerBinding.instance.addPostFrameCallback((_) => old?.dispose());
-      });
-    });
+        setState(() => _useOutlines = true);
+        _trace();
+      },
+    );
   }
 
   void _trace() {

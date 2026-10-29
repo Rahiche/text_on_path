@@ -53,6 +53,24 @@ void main() {
     });
   });
 
+  group('atlas', () {
+    setUpAll(() => loadFont('Naskh', 'NotoNaskhArabic.ttf'));
+
+    test('large text at a high density still fits one texture', () async {
+      // At 140 px and 8 texels a pixel, its clusters' cells in rows of 4096 would stand some 50,000 texels tall: more
+      // than a GPU takes, and an atlas that comes back smaller than asked for was read past its end (0.1.0).
+      final big = await ShapedText.layout('الحروف تبقى متصلة', const TextStyle(fontFamily: 'Naskh', fontSize: 140), scale: 8);
+      addTearDown(big.dispose);
+      final image = big.atlas.image;
+      expect(image.width, lessThanOrEqualTo(ShapedText.maxTextureSide));
+      expect(image.height, lessThanOrEqualTo(ShapedText.maxTextureSide));
+      expect(image.width * image.height, lessThanOrEqualTo(16 << 20));
+      expect(big.scale, lessThan(8));
+      // Its joins found all the same.
+      expect(big.neighbours.where((p) => p.joins), hasLength(9));
+    });
+  });
+
   group('placement', () {
     late ShapedText arabic, hindi;
 

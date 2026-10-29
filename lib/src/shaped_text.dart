@@ -30,7 +30,8 @@ class ShapedText {
   })  : _alpha = alpha,
         _atlasWidth = atlasWidth;
 
-  /// Shapes [text] in [style] and draws its clusters into an atlas at [scale] texels per logical pixel.
+  /// Shapes [text] in [style] and draws its clusters into an atlas at [scale] texels per logical pixel (or fewer, if
+  /// that atlas wouldn't fit one texture of at most [maxTextureSide] a side and 16M texels in all).
   ///
   /// [connection] says which rows the script's letters join on; by default they're found from the run itself.
   static Future<ShapedText> layout(
@@ -85,7 +86,7 @@ class ShapedText {
           neighbours: const [],
           atlas: TextAtlas._(
             atlas.image,
-            scale,
+            atlas.density,
             [for (final u in units) u.cell],
             [for (final u in units) u.cellOrigin],
             identity,
@@ -652,11 +653,19 @@ class ConnectionLine {
 }
 
 class _Atlas {
-  _Atlas(this.image, this.alpha, this.units);
+  _Atlas(this.image, this.alpha, this.units, this.density);
 
   final ui.Image image;
   final Uint8List alpha;
   final List<TextUnit> units;
+
+  /// Texels per logical pixel: the density asked for, or less if that atlas wouldn't fit.
+  final double density;
+
+  /// The most texels a shaping atlas may hold. Past it, or past [ShapedText.maxTextureSide] on a side, it's drawn at
+  /// a lower density: a texture bigger than the GPU takes comes back smaller than asked for, and reading it as the size
+  /// asked for runs off its end.
+  static const maxTexels = 16 << 20;
 
   // Room round each cluster's box for ink that overhangs it.
   static double marginX(double fontSize) => 1.5 * fontSize;
@@ -673,29 +682,49 @@ class _Atlas {
     double fontSize,
     double scale,
   ) async {
-    const maxRow = 4096.0;
     final mx = marginX(fontSize), my = marginY(fontSize);
-    final units = <TextUnit>[];
-    var x = 0.0, y = 0.0, rowHeight = 0.0, atlasWidth = 0.0;
-    for (var i = 0; i < ranges.length; i++) {
-      final flat = Rect.fromLTRB(
-        math.max(-mx, boxes[i].left - mx),
-        -my,
-        math.min(width + mx, boxes[i].right + mx),
-        height + my,
-      );
-      final w = (flat.width * scale).ceil() + 2.0, h = (flat.height * scale).ceil() + 2.0;
-      if (x > 0 && x + w > maxRow) {
-        x = 0;
-        y += rowHeight;
-        rowHeight = 0;
+    final flats = [
+      for (var i = 0; i < ranges.length; i++)
+        Rect.fromLTRB(
+          math.max(-mx, boxes[i].left - mx),
+          -my,
+          math.min(width + mx, boxes[i].right + mx),
+          height + my,
+        ),
+    ];
+    // The cells packed in rows about as wide as the whole is tall, at the density asked for if that fits a texture
+    // and the budget; else at a lower one.
+    var density = scale;
+    var cells = <Rect>[];
+    var atlasWidth = 1.0, atlasHeight = 1.0;
+    for (;;) {
+      final sizes = [for (final f in flats) Size((f.width * density).ceil() + 2.0, (f.height * density).ceil() + 2.0)];
+      final area = sizes.fold(0.0, (a, s) => a + s.width * s.height);
+      final widest = sizes.fold(0.0, (m, s) => math.max(m, s.width));
+      const side = ShapedText.maxTextureSide;
+      final rowWidth = math.max(widest, math.min(side.toDouble(), math.sqrt(area) * 1.3));
+      cells = [];
+      var x = 0.0, y = 0.0, rowHeight = 0.0;
+      atlasWidth = 1;
+      for (final size in sizes) {
+        if (x > 0 && x + size.width > rowWidth) {
+          x = 0;
+          y += rowHeight;
+          rowHeight = 0;
+        }
+        cells.add(Rect.fromLTWH(x + 1, y + 1, size.width - 2, size.height - 2));
+        x += size.width;
+        rowHeight = math.max(rowHeight, size.height);
+        atlasWidth = math.max(atlasWidth, x);
       }
-      units.add(TextUnit._(ranges[i], boxes[i], Rect.fromLTWH(x + 1, y + 1, w - 2, h - 2), flat.topLeft));
-      x += w;
-      rowHeight = math.max(rowHeight, h);
-      atlasWidth = math.max(atlasWidth, x);
+      atlasHeight = math.max(1.0, y + rowHeight);
+      final over = math.max(math.max(atlasWidth, atlasHeight) / side, math.sqrt(atlasWidth * atlasHeight / maxTexels));
+      if (over <= 1 || density < 0.05) break;
+      density /= over * 1.05;
     }
-    final atlasHeight = y + rowHeight;
+    final units = [
+      for (var i = 0; i < ranges.length; i++) TextUnit._(ranges[i], boxes[i], cells[i], flats[i].topLeft),
+    ];
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -704,12 +733,18 @@ class _Atlas {
         ..save()
         ..translate(u.cell.left, u.cell.top)
         ..clipRect(Rect.fromLTWH(0, 0, u.cell.width, u.cell.height))
-        ..scale(scale)
+        ..scale(density)
         ..translate(-u.cellOrigin.dx, -u.cellOrigin.dy)
         ..drawParagraph(_paragraph(text, style, direction, only: u.range), Offset.zero)
         ..restore();
     }
     final image = await recorder.endRecording().toImage(atlasWidth.ceil(), atlasHeight.ceil());
+    // (Smaller than asked for, its cells would run off its end: say so instead.)
+    if (image.width != atlasWidth.ceil() || image.height != atlasHeight.ceil()) {
+      final got = '${image.width}×${image.height}';
+      image.dispose();
+      throw StateError('A ${atlasWidth.ceil()}×${atlasHeight.ceil()} atlas came back $got.');
+    }
     final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba))!.buffer.asUint8List();
     final aw = image.width;
     final alpha = Uint8List(aw * image.height);
@@ -733,13 +768,13 @@ class _Atlas {
       }
       if (r >= 0) {
         u.ink = Rect.fromLTRB(
-          u.cellOrigin.dx + (l - u.cell.left) / scale,
-          u.cellOrigin.dy + (t - u.cell.top) / scale,
-          u.cellOrigin.dx + (r + 1 - u.cell.left) / scale,
-          u.cellOrigin.dy + (b + 1 - u.cell.top) / scale,
+          u.cellOrigin.dx + (l - u.cell.left) / density,
+          u.cellOrigin.dy + (t - u.cell.top) / density,
+          u.cellOrigin.dx + (r + 1 - u.cell.left) / density,
+          u.cellOrigin.dy + (b + 1 - u.cell.top) / density,
         );
       }
     }
-    return _Atlas(image, alpha, units);
+    return _Atlas(image, alpha, units, density);
   }
 }
