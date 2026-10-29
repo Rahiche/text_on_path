@@ -12,6 +12,33 @@ into the next, so when the two turn by different angles it splits: a gap on the 
 inside. Bending the whole run instead keeps joins closed but stretches every letter on the outside of a bend and
 squashes it on the inside. text_on_path keeps letters rigid and bends only the rows they join on.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/schematic.png" alt="Three ways onto a bend: each letter turned whole splits the headline into a wedge; the whole line bent closes joins but stretches every letter; only the joining rows bent closes joins and keeps letters' shape" width="720">
+</p>
+
+## Scripts
+
+<table>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_arabic.png" alt="Arabic on an arc and an S-curve" width="360"></td>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_persian.png" alt="Persian on an arc and an S-curve" width="360"></td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_urdu.png" alt="Urdu, in Nastaliq, on an arc and an S-curve" width="360"></td>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_hindi.png" alt="Hindi on an arc and an S-curve" width="360"></td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_bengali.png" alt="Bengali on an arc and an S-curve" width="360"></td>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_latin_script.png" alt="A Latin script hand on an arc and an S-curve" width="360"></td>
+  </tr>
+</table>
+
+Seals: each phrase twice round a ring, fitted by kashida, tracking or word spacing.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/seals.png" alt="Six seals: Arabic and Persian fitted by kashida, Hindi and Bengali by tracking, Urdu and a Latin script hand by word spacing" width="720">
+</p>
+
 ## Use
 
 ```sh
@@ -64,6 +91,14 @@ and paints it, from an atlas or outlines; `TextOnPathMetrics.of(placement)` meas
    the curve; points away from them stand rigid with their letter; one eases into the other over 0.18 em.
 5. **Draw joins out, or pull them shut.** Where rigid letters land apart along the curve, a flat join is drawn out with
    its own cross-section, as a tatweel would be; a sloping one is pulled shut, the pull fading out over 0.3 em.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/figures/mesh.png" alt="Three Devanagari clusters' meshes, flat and on a tight circle: the joining rows, in teal, bend and run on across the clusters; the rest of each cluster's grid stays straight and turns whole" width="720">
+</p>
+
+*Three Devanagari clusters, flat (left) and on a tight circle (right). Each cluster's grid keeps its own colour; the
+joining rows (teal) bend with the curve and run on from cluster to cluster, while the rest of each grid stays straight
+and turns whole.*
 
 ## How well it works
 

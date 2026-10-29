@@ -167,41 +167,49 @@ class _SampleRowState extends State<SampleRow> {
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 170,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    s.name,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: ink),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(s.font, style: const TextStyle(fontSize: 12, color: muted)),
-                  const SizedBox(height: 10),
-                  Text(s.text, style: s.style(19)),
-                  if (s.meaning.isNotEmpty) Text('“${s.meaning}”', style: const TextStyle(fontSize: 12, color: muted)),
-                  const SizedBox(height: 10),
-                  Text('Joins ${s.joinsOn}.', style: const TextStyle(fontSize: 12, color: muted, height: 1.35)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Shaped(
-                // Denser than the screen needs, so the loupes stay crisp.
-                oversample: 3,
-                text: s.text,
-                style: s.style(widget.size),
-                builder: (context, shaped) => LayoutBuilder(
-                  builder: (context, constraints) => _panels(shaped, constraints.maxWidth),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final label = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.name,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: ink),
                 ),
+                const SizedBox(height: 2),
+                Text(s.font, style: const TextStyle(fontSize: 12, color: muted)),
+                const SizedBox(height: 10),
+                Text(s.text, style: s.style(19)),
+                if (s.meaning.isNotEmpty) Text('“${s.meaning}”', style: const TextStyle(fontSize: 12, color: muted)),
+                const SizedBox(height: 10),
+                Text('Joins ${s.joinsOn}.', style: const TextStyle(fontSize: 12, color: muted, height: 1.35)),
+              ],
+            );
+            final panels = Shaped(
+              // Denser than the screen needs, so the loupes stay crisp.
+              oversample: 3,
+              text: s.text,
+              style: s.style(widget.size),
+              builder: (context, shaped) => LayoutBuilder(
+                builder: (context, constraints) => _panels(shaped, constraints.maxWidth),
               ),
-            ),
-          ],
+            );
+            // Narrow screens put the label above the panels.
+            if (constraints.maxWidth < 900) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [label, const SizedBox(height: 10), panels],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 170, child: label),
+                const SizedBox(width: 12),
+                Expanded(child: panels),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -210,8 +218,10 @@ class _SampleRowState extends State<SampleRow> {
   Widget _panels(ShapedText? shaped, double width) {
     final modes = [TextOnPathMode.rigid, if (widget.warp) TextOnPathMode.warp, TextOnPathMode.joined];
     const gap = 10.0, curveGap = 22.0;
-    final count = 2 * modes.length;
-    final w = (width - (count - 2) * gap - curveGap) / count;
+    // Every curve on one row when there's room, else a row each.
+    final wide = width >= 1000;
+    final count = wide ? 2 * modes.length : modes.length;
+    final w = wide ? (width - (count - 2) * gap - curveGap) / count : (width - (count - 1) * gap) / count;
     final panel = Size(w, (w * 0.7).clamp(160.0, 290.0));
     final area = Size(panel.width, panel.height - 20);
     final curves = {
@@ -271,9 +281,17 @@ class _SampleRowState extends State<SampleRow> {
       }
     }
 
-    final children = <Widget>[];
+    final rows = <List<Widget>>[];
+    var children = <Widget>[];
     for (final MapEntry(key: name, value: curve) in curves.entries) {
-      if (children.isNotEmpty) children.add(const SizedBox(width: curveGap));
+      if (children.isNotEmpty) {
+        if (wide) {
+          children.add(const SizedBox(width: curveGap));
+        } else {
+          rows.add(children);
+          children = <Widget>[];
+        }
+      }
       for (final (i, mode) in modes.indexed) {
         if (i > 0) children.add(const SizedBox(width: gap));
         children.add(
@@ -316,6 +334,15 @@ class _SampleRowState extends State<SampleRow> {
         );
       }
     }
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    rows.add(children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (i, row) in rows.indexed) ...[
+          if (i > 0) const SizedBox(height: gap),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: row),
+        ],
+      ],
+    );
   }
 }

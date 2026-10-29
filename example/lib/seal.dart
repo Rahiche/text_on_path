@@ -10,8 +10,16 @@ const sealRed = Color(0xff9c1d15);
 
 /// Each phrase said twice round a whole ring and fitted to it, as on a seal: kashida for Arabic and Persian, tracking
 /// for Hindi and Bengali, word spacing for Urdu and the Latin script hand. Rigid per-glyph placement beside joined.
-class SealPage extends StatelessWidget {
+class SealPage extends StatefulWidget {
   const SealPage({super.key});
+
+  @override
+  State<SealPage> createState() => _SealPageState();
+}
+
+class _SealPageState extends State<SealPage> {
+  // Each script's own way, or one way for all of them.
+  TextOnPathFit? _fit;
 
   @override
   Widget build(BuildContext context) {
@@ -19,9 +27,31 @@ class SealPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       children: [
         Wrap(
+          spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Text('Fitted by', style: TextStyle(fontSize: 13, color: muted)),
+            SegmentedButton<TextOnPathFit?>(
+              segments: const [
+                ButtonSegment(value: null, label: Text("Each script's own")),
+                ButtonSegment(value: TextOnPathFit.kashida, label: Text('Kashida')),
+                ButtonSegment(value: TextOnPathFit.tracking, label: Text('Tracking')),
+                ButtonSegment(value: TextOnPathFit.spacing, label: Text('Word spacing')),
+              ],
+              selected: {_fit},
+              onSelectionChanged: (s) => setState(() => _fit = s.first),
+            ),
+            const Text(
+              'Kashida falls back to tracking outside Arabic script.',
+              style: TextStyle(fontSize: 12.5, color: muted),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
           spacing: 14,
           runSpacing: 14,
-          children: [for (final s in samples) _SealCard(sample: s)],
+          children: [for (final s in samples) _SealCard(sample: s, fit: _fit ?? s.fit)],
         ),
       ],
     );
@@ -29,9 +59,10 @@ class SealPage extends StatelessWidget {
 }
 
 class _SealCard extends StatelessWidget {
-  const _SealCard({required this.sample});
+  const _SealCard({required this.sample, required this.fit});
 
   final Sample sample;
+  final TextOnPathFit fit;
 
   static const sealSize = 250.0;
 
@@ -67,7 +98,7 @@ class _SealCard extends StatelessWidget {
               Text(sample.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: ink)),
               const SizedBox(width: 8),
               Text(
-                'fitted by ${sample.fit.name == 'spacing' ? 'word spacing' : sample.fit.name}',
+                'fitted by ${fit.name == 'spacing' ? 'word spacing' : fit.name}',
                 style: const TextStyle(fontSize: 12, color: muted),
               ),
             ],
@@ -80,7 +111,7 @@ class _SealCard extends StatelessWidget {
               children: [
                 for (final mode in [TextOnPathMode.rigid, TextOnPathMode.joined]) ...[
                   if (mode == TextOnPathMode.joined) const SizedBox(width: 14),
-                  _Seal(shaped: shaped, mode: mode, fit: sample.fit),
+                  _Seal(key: ValueKey((mode, fit)), shaped: shaped, mode: mode, fit: fit),
                 ],
               ],
             ),
@@ -92,7 +123,7 @@ class _SealCard extends StatelessWidget {
 }
 
 class _Seal extends StatefulWidget {
-  const _Seal({required this.shaped, required this.mode, required this.fit});
+  const _Seal({super.key, required this.shaped, required this.mode, required this.fit});
 
   final ShapedText? shaped;
   final TextOnPathMode mode;

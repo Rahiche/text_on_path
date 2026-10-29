@@ -126,6 +126,25 @@ Rect placedBounds(TextOnPathPlacement p) {
   return box ?? Rect.zero;
 }
 
+/// How many of [placement]'s joins visibly open or overlap: their two sides, as drawn, more than half a pixel apart.
+/// A quick count, a few rows a join, for showing live.
+int openJoins(TextOnPathPlacement placement) {
+  var open = 0;
+  for (final p in placement.text.neighbours) {
+    if (!p.joins) continue;
+    var worst = 0.0;
+    for (final (y0, y1) in p.crossing) {
+      for (final y in [y0 + 0.5, (y0 + y1) / 2, y1 - 0.5]) {
+        for (final (a, b) in placement.joinCopies(p, y)) {
+          worst = math.max(worst, (b - a).distance);
+        }
+      }
+    }
+    if (worst > 0.5) open++;
+  }
+  return open;
+}
+
 /// The join that [rigid] placement opens widest, and the row through its middle.
 (UnitPair, double)? worstJoin(TextOnPathPlacement rigid) {
   (UnitPair, double)? worst;
@@ -168,6 +187,7 @@ class PlacementPainter extends CustomPainter {
     this.showCurve = true,
     this.shift = Offset.zero,
     this.loupe,
+    this.loupeAtlas,
   });
 
   final ShapedText shaped;
@@ -179,9 +199,12 @@ class PlacementPainter extends CustomPainter {
   final Offset shift;
   final Loupe? loupe;
 
+  /// A denser atlas for the loupe, so the magnified text stays sharp.
+  final TextAtlas? loupeAtlas;
+
   TextOnPathPlacement get placement => TextOnPathPlacement(shaped, curve, mode: mode, fit: fit, fitLength: fitLength);
 
-  void _scene(Canvas canvas, TextOnPathPlacement p) {
+  void _scene(Canvas canvas, TextOnPathPlacement p, [TextAtlas? atlas]) {
     if (showCurve) {
       canvas.drawPath(
         curve.toPath(),
@@ -191,7 +214,7 @@ class PlacementPainter extends CustomPainter {
           ..color = const Color(0x22000000),
       );
     }
-    p.paint(canvas);
+    p.paint(canvas, atlas: atlas);
     if (showMesh) {
       canvas.drawPath(
         p.meshPath(),
@@ -231,7 +254,7 @@ class PlacementPainter extends CustomPainter {
       ..translate(l.center.dx, l.center.dy)
       ..scale(l.zoom)
       ..translate(-source.dx + shift.dx, -source.dy + shift.dy);
-    _scene(canvas, p);
+    _scene(canvas, p, loupeAtlas);
     canvas.restore();
     canvas.drawCircle(l.center, l.radius, edge..strokeWidth = 1.5);
   }
@@ -246,7 +269,8 @@ class PlacementPainter extends CustomPainter {
       old.showMesh != showMesh ||
       old.showCurve != showCurve ||
       old.shift != shift ||
-      old.loupe != loupe;
+      old.loupe != loupe ||
+      old.loupeAtlas != loupeAtlas;
 }
 
 /// A small caption: a coloured label, and the two measurements under it.

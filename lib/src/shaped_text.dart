@@ -1,7 +1,7 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 /// Text shaped once, as one straight line, by Flutter's own paragraph engine, then drawn one grapheme cluster at a
@@ -61,6 +61,8 @@ class ShapedText {
 
     // A ligature lives in the first of its clusters, so the others draw nothing alone; those are merged in and the
     // atlas drawn again.
+    // What ties an atlas to the text it was drawn from.
+    final identity = Object();
     for (var attempt = 0;; attempt++) {
       final boxes = [for (final r in ranges) _box(full, r)];
       final atlas = await _Atlas.draw(text, style, direction, ranges, boxes, width, height, fontSize, scale);
@@ -84,6 +86,7 @@ class ShapedText {
             scale,
             [for (final u in units) u.cell],
             [for (final u in units) u.cellOrigin],
+            identity,
           ),
           band: null,
           alpha: atlas.alpha,
@@ -195,7 +198,7 @@ class ShapedText {
         ..restore();
     }
     final image = await recorder.endRecording().toImage(atlasWidth.ceil(), atlasHeight.ceil());
-    return TextAtlas._(image, density, cells, [for (final r in rects) r.topLeft]);
+    return TextAtlas._(image, density, cells, [for (final r in rects) r.topLeft], atlas._owner);
   }
 
   /// The longest side an atlas may have: what GPUs reliably take.
@@ -479,7 +482,7 @@ ui.Paragraph _paragraph(String text, TextStyle style, TextDirection direction, {
 
 /// The run's clusters drawn at some density, each alone in its own cell.
 class TextAtlas {
-  TextAtlas._(this.image, this.density, this._cells, this._origins);
+  TextAtlas._(this.image, this.density, this._cells, this._origins, this._owner);
 
   /// The cells.
   final ui.Image image;
@@ -489,6 +492,10 @@ class TextAtlas {
 
   final List<Rect> _cells;
   final List<Offset> _origins;
+  final Object _owner;
+
+  /// Whether this atlas was drawn from [text] (its own, or by its [ShapedText.drawAtlas]).
+  bool isFor(ShapedText text) => identical(_owner, text.atlas._owner);
 
   /// Where the flat point ([x], [y]) of cluster [unit] (an index into [ShapedText.units]) is in [image], in texels.
   Offset texel(int unit, double x, double y) => Offset(
@@ -496,8 +503,32 @@ class TextAtlas {
         _cells[unit].top + (y - _origins[unit].dy) * density,
       );
 
+  ImageShader? _shader;
+  FilterQuality? _quality;
+
+  /// A shader of [image] in texels, for a [Paint]: made once and kept while the atlas lives. (On the web, disposing an
+  /// image shader disposes its image too, so one made and disposed for each paint would take the atlas with it.)
+  ImageShader shader(FilterQuality quality) {
+    if (_shader == null || _quality != quality) {
+      _shader = ImageShader(image, TileMode.decal, TileMode.decal, _identity, filterQuality: quality);
+      _quality = quality;
+    }
+    return _shader!;
+  }
+
+  static final _identity = Float64List.fromList([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+
   /// Frees the image.
-  void dispose() => image.dispose();
+  void dispose() {
+    // On the web the shader owns the image, and disposing it disposes both.
+    if (kIsWeb && _shader != null) {
+      _shader!.dispose();
+    } else {
+      _shader?.dispose();
+      image.dispose();
+    }
+    _shader = null;
+  }
 }
 
 /// One grapheme cluster of the run.

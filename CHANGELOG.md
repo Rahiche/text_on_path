@@ -8,4 +8,5 @@
 - Sharp at any zoom: the atlas is drawn again for the scale the text is shown at, and past a memory budget the text is
   drawn from traced outlines (`TextOnPathRendering`).
 - `TextOutlines` and `TextOnPathPlacement.toSvg` / `toPdf`: the placed text as vectors.
-- `TextOnPathMetrics`: the area of gaps and overlaps at joins, and how far letters were distorted.
+- `TextOnPathMetrics`: the area of gaps and overlaps at joins, how many joins visibly open, and how far letters were
+  distorted.

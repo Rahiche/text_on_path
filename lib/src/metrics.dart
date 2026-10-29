@@ -8,6 +8,7 @@ class TextOnPathMetrics {
     required this.gapArea,
     required this.overlapArea,
     required this.joins,
+    required this.openJoins,
     required this.distortion,
     required this.worstDistortion,
   });
@@ -24,10 +25,11 @@ class TextOnPathMetrics {
   factory TextOnPathMetrics.of(TextOnPathPlacement placement) {
     final text = placement.text;
     final step = 1 / text.scale;
-    var gap = 0.0, overlap = 0.0, joins = 0;
+    var gap = 0.0, overlap = 0.0, joins = 0, open = 0;
     for (final p in text.neighbours) {
       if (!p.joins) continue;
       joins++;
+      var widest = 0.0;
       for (final (y0, y1) in p.crossing) {
         for (var y = y0 + step / 2; y < y1; y += step) {
           // Along the text, from the left cluster's side of the join to the right one's.
@@ -35,6 +37,7 @@ class TextOnPathMetrics {
               (placement.rendered(p.right, p.x + 0.5, y) - placement.rendered(p.right, p.x - 0.5, y));
           for (final (a, b) in placement.joinCopies(p, y)) {
             final along = ((b - a).dx * t.dx + (b - a).dy * t.dy) / t.distance;
+            widest = math.max(widest, along.abs());
             if (along > 0) {
               gap += along * step;
             } else {
@@ -43,6 +46,7 @@ class TextOnPathMetrics {
           }
         }
       }
+      if (widest > 0.5) open++;
     }
 
     var squared = 0.0, weight = 0.0, worst = 0.0;
@@ -90,6 +94,7 @@ class TextOnPathMetrics {
       gapArea: gap,
       overlapArea: overlap,
       joins: joins,
+      openJoins: open,
       distortion: weight > 0 ? math.sqrt(squared / weight) : 0,
       worstDistortion: worst,
     );
@@ -106,6 +111,9 @@ class TextOnPathMetrics {
 
   /// How many joins were measured.
   final int joins;
+
+  /// How many of them visibly open or overlap: their two sides more than half a pixel apart along the text.
+  final int openJoins;
 
   /// How far, in pixels, ink moved from where a rigid letter would put it (root mean square over all the ink).
   final double distortion;

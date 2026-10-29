@@ -1,16 +1,20 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:text_on_path/text_on_path.dart';
 
+import 'bend.dart';
 import 'compare.dart';
+import 'draw.dart';
 import 'panel.dart';
+import 'platform_io.dart' if (dart.library.js_interop) 'platform_web.dart' as platform;
 import 'seal.dart';
 import 'zoom.dart';
 
-/// With `--dart-define=CAPTURE=true`, the app saves each tab as a PNG in its temporary directory and quits.
+/// With `--dart-define=CAPTURE=true` (not on the web), the app saves each tab as a PNG in its temporary directory and
+/// quits.
 const capture = bool.fromEnvironment('CAPTURE');
 
 void main() => runApp(const TextOnPathDemo());
@@ -41,30 +45,32 @@ class _Home extends StatefulWidget {
 }
 
 class _HomeState extends State<_Home> with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(length: 3, vsync: this);
+  static const _pages = ['Bend', 'Compare', 'Draw', 'Seals', 'Zoom'];
+  late final _tabs = TabController(length: _pages.length, vsync: this);
   final _boundary = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    if (capture) WidgetsBinding.instance.addPostFrameCallback((_) => _capture());
+    if (capture && !kIsWeb) WidgetsBinding.instance.addPostFrameCallback((_) => _capture());
   }
 
   Future<void> _capture() async {
-    final dir = Directory('${Directory.systemTemp.path}/text_on_path_capture')..createSync(recursive: true);
+    final dir = platform.captureFolder();
     Future<void> save(String name) async {
       await Future<void>.delayed(const Duration(seconds: 3));
       final boundary = _boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: ui.PlatformDispatcher.instance.views.first.devicePixelRatio);
       final png = await image.toByteData(format: ui.ImageByteFormat.png);
-      final file = File('${dir.path}/$name.png')..writeAsBytesSync(png!.buffer.asUint8List());
-      stdout.writeln('CAPTURED ${file.path}');
+      platform.writeCapture('$dir/$name.png', png!.buffer.asUint8List());
     }
 
+    await save('bend');
+    _tabs.index = 1;
     await save('compare');
     compareScroll.jumpTo(compareScroll.position.maxScrollExtent);
     await save('compare_end');
-    for (final (i, name) in [(1, 'seals'), (2, 'zoom')]) {
+    for (final (i, name) in [(2, 'draw'), (3, 'seals'), (4, 'zoom')]) {
       _tabs.index = i;
       await save(name);
     }
@@ -74,7 +80,7 @@ class _HomeState extends State<_Home> with SingleTickerProviderStateMixin {
       zoomRendering.value = rendering;
       await save('zoom8_${rendering.name}');
     }
-    exit(0);
+    platform.quit();
   }
 
   @override
@@ -92,22 +98,25 @@ class _HomeState extends State<_Home> with SingleTickerProviderStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Text on a curve, joins kept',
+                    const Text(
+                      'text_on_path',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: ink),
                     ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Rigid per-glyph placement turns each letter whole, so joins open on the outside of a bend and '
-                      'overlap on the inside. Joined placement keeps letters rigid but lets the rows they join on '
-                      'follow the curve. Joins: area of gaps and overlaps. Distortion: how far ink moved from a rigid '
-                      'letter (RMS). Both measured on the drawn mesh.',
-                      style: TextStyle(fontSize: 13, color: muted, height: 1.4),
+                    const SizedBox(height: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1100),
+                      child: const Text(
+                        'Text along any curve, cursive joins kept closed. Turning each letter whole, as text-on-path '
+                        'packages do, opens joins on the outside of a bend and overlaps them on the inside; bending '
+                        'the whole line stretches the letters. text_on_path keeps letters rigid and bends only the '
+                        'rows they join on.',
+                        style: TextStyle(fontSize: 13, color: muted, height: 1.4),
+                      ),
                     ),
                   ],
                 ),
@@ -116,14 +125,14 @@ class _HomeState extends State<_Home> with SingleTickerProviderStateMixin {
                 controller: _tabs,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                tabs: const [
-                  Tab(text: 'Compare'),
-                  Tab(text: 'Seals'),
-                  Tab(text: 'Zoom'),
-                ],
+                tabs: [for (final p in _pages) Tab(text: p)],
               ),
               Expanded(
-                child: TabBarView(controller: _tabs, children: const [ComparePage(), SealPage(), ZoomPage()]),
+                child: TabBarView(
+                  controller: _tabs,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: const [BendPage(), ComparePage(), DrawPage(), SealPage(), ZoomPage()],
+                ),
               ),
             ],
           ),

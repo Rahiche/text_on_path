@@ -1,9 +1,10 @@
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:text_on_path/text_on_path.dart';
 
 import 'panel.dart';
+import 'platform_io.dart' if (dart.library.js_interop) 'platform_web.dart' as platform;
 import 'samples.dart';
 
 /// The Zoom tab's view and rendering, so a capture can set them.
@@ -65,16 +66,13 @@ class _ZoomPageState extends State<ZoomPage> {
     final shaped = await ShapedText.layout(_sample.text, _sample.style(fontSize));
     final outlines = await TextOutlines.trace(shaped);
     final placement = TextOnPathPlacement(shaped, _curve(size), mode: _mode);
-    final dir = Directory('${Directory.systemTemp.path}/text_on_path_export')..createSync(recursive: true);
-    final file = File('${dir.path}/${_sample.name.toLowerCase().replaceAll(' ', '_')}_${_mode.name}.$kind');
-    if (kind == 'svg') {
-      file.writeAsStringSync(placement.toSvg(outlines));
-    } else {
-      file.writeAsBytesSync(placement.toPdf(outlines));
-    }
+    final name = '${_sample.name.toLowerCase().replaceAll(' ', '_')}_${_mode.name}.$kind';
+    final saved = kind == 'svg'
+        ? await platform.saveFile(name, utf8.encode(placement.toSvg(outlines)), 'image/svg+xml')
+        : await platform.saveFile(name, placement.toPdf(outlines), 'application/pdf');
     shaped.dispose();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved ${file.path}')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved)));
   }
 
   @override

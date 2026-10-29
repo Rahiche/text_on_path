@@ -503,9 +503,10 @@ class TextOnPathPlacement {
   }
 
   /// The mesh: a grid over each cluster's ink, mapped onto the curve, sampling [atlas] (by default
-  /// [ShapedText.atlas]). Drawn with a paint whose shader is an [ImageShader] of the atlas's image (see [paint]).
+  /// [ShapedText.atlas]; an atlas drawn from some other text is passed over for it). Drawn with a paint whose shader is
+  /// an [ImageShader] of the atlas's image (see [paint]).
   List<ui.Vertices> vertices({TextAtlas? atlas, double? spacing}) {
-    final source = atlas ?? text.atlas;
+    final source = atlas != null && atlas.isFor(text) ? atlas : text.atlas;
     final step = spacing ?? meshSpacing;
     final out = <ui.Vertices>[];
     final pos = <double>[], tex = <double>[], idx = <int>[];
@@ -578,22 +579,15 @@ class TextOnPathPlacement {
     return out;
   }
 
-  /// Draws the text with [canvas], from [atlas] (by default [ShapedText.atlas]).
+  /// Draws the text with [canvas], from [atlas] (by default [ShapedText.atlas]; an atlas drawn from some other text,
+  /// say while a new one is drawn for it, is passed over for it).
   void paint(Canvas canvas, {TextAtlas? atlas, FilterQuality filterQuality = FilterQuality.medium}) {
-    final source = atlas ?? text.atlas;
-    final shader = ImageShader(
-      source.image,
-      TileMode.decal,
-      TileMode.decal,
-      Matrix4Storage.identity,
-      filterQuality: filterQuality,
-    );
-    final paint = Paint()..shader = shader;
+    final source = atlas != null && atlas.isFor(text) ? atlas : text.atlas;
+    final paint = Paint()..shader = source.shader(filterQuality);
     for (final v in vertices(atlas: source)) {
       canvas.drawVertices(v, BlendMode.srcOver, paint);
       v.dispose();
     }
-    shader.dispose();
   }
 
   /// The placed text as vector shapes, from [outlines] traced from [text]: for each cluster and each bridge, its
@@ -840,9 +834,4 @@ extension on Path {
       close();
     }
   }
-}
-
-/// An identity matrix, for an [ImageShader] that samples in texels.
-abstract final class Matrix4Storage {
-  static final identity = Float64List.fromList([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 }
