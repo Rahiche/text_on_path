@@ -5,6 +5,10 @@
   stand taller than a GPU texture; the smaller image that came back was read as the size asked for. It now packs about
   as wide as tall and, when that wouldn't fit 8192 texels a side or 16M in all, is drawn at a lower density.
 - An atlas for a zoomed view that can't be drawn falls back to the traced outlines instead of throwing.
+- A shorter README: what it does, demos and links. The details move to their own pages: getting started and how it
+  works (in `doc/`).
+- Three more demos: selecting text on a curve, a seal filling as its joins are drawn out, and text following a curve
+  drawn by hand.
 
 ## 0.1.0
 
