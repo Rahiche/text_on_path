@@ -1,0 +1,37 @@
+name: text_on_path_example
+description: Cursive scripts on a circle and an S-curve, rigid per-glyph placement beside text_on_path's joined placement.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  text_on_path:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Naskh
+      fonts:
+        - asset: fonts/NotoNaskhArabic.ttf
+    - family: Nastaliq
+      fonts:
+        - asset: fonts/NotoNastaliqUrdu.ttf
+    - family: Deva
+      fonts:
+        - asset: fonts/NotoSansDevanagari.ttf
+    - family: Beng
+      fonts:
+        - asset: fonts/NotoSansBengali.ttf
+    - family: Dancing
+      fonts:
+        - asset: fonts/DancingScript.ttf

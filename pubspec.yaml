@@ -1,0 +1,24 @@
+name: text_on_path
+description: Text along any curve, a circle for a seal or any Path, with cursive scripts kept joined. Arabic, Persian and Urdu stay connected; Devanagari and Bengali keep their headline.
+version: 0.1.0
+repository: https://github.com/Rahiche/text_on_path
+issue_tracker: https://github.com/Rahiche/text_on_path/issues
+topics: [text, typography, arabic, rtl, curved-text]
+screenshots:
+  - description: Hindi and Urdu on a circle that bends, each cluster turned rigidly beside text_on_path, which keeps the joins closed.
+    path: doc/images/bend.gif
+  - description: Each sample on a circle and an S-curve in the example app, rigid placement beside joined placement, measured.
+    path: doc/images/app_compare_end.png
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^5.0.0
