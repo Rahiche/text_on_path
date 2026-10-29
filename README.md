@@ -12,6 +12,9 @@ into the next, so when the two turn by different angles it splits: a gap on the 
 inside. Bending the whole run instead keeps joins closed but stretches every letter on the outside of a bend and
 squashes it on the inside. text_on_path keeps letters rigid and bends only the rows they join on.
 
+**Try it in the browser: [rahiche.github.io/text_on_path](https://rahiche.github.io/text_on_path/)**: bend a curve and
+watch the joins, draw your own, type your own text, and see the seals.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/schematic.png" alt="Three ways onto a bend: each letter turned whole splits the headline into a wedge; the whole line bent closes joins but stretches every letter; only the joining rows bent closes joins and keeps letters' shape" width="720">
 </p>
@@ -127,7 +130,7 @@ in [doc/sharpness.md](https://github.com/Rahiche/text_on_path/blob/main/doc/shar
 
 ## The example app
 
-`example/` shows Arabic, Persian, Urdu, Hindi, Bengali and a Latin script hand on a circle and an S-curve, rigid
+`example/` is the [gallery](https://rahiche.github.io/text_on_path/), and runs on the desktop and phones too. It shows Arabic, Persian, Urdu, Hindi, Bengali and a Latin script hand on a circle and an S-curve, rigid
 placement beside joined, measured, with a loupe on the join rigid placement opens widest; seals fitted by kashida,
 tracking or word spacing; and a zoomable view that saves SVG and PDF. Its fonts are bundled under the SIL Open Font
 License.

@@ -1,6 +1,7 @@
 name: text_on_path
 description: Text along any curve, a circle for a seal or any Path, with cursive scripts kept joined. Arabic, Persian and Urdu stay connected; Devanagari and Bengali keep their headline.
 version: 0.1.0
+homepage: https://rahiche.github.io/text_on_path/
 repository: https://github.com/Rahiche/text_on_path
 issue_tracker: https://github.com/Rahiche/text_on_path/issues
 topics: [text, typography, arabic, rtl, curved-text]
