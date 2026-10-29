@@ -1,45 +1,18 @@
 # text_on_path
 
-Text along any curve in Flutter, a circle for a seal or any `Path`, with cursive scripts kept joined: Arabic, Persian
-and Urdu letters stay connected; Devanagari and Bengali keep an unbroken headline.
+Text along any curve in Flutter, with cursive scripts kept joined.
+
+**[Try it in your browser →](https://rahiche.github.io/text_on_path/)**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/bend.gif" alt="Hindi and Urdu on a circle that bends: each cluster turned rigidly opens the joins; text_on_path keeps them closed" width="720">
 </p>
 
-Text-on-path packages turn each glyph (or each character) whole to the curve. A joining stroke runs from one letter
-into the next, so when the two turn by different angles it splits: a gap on the outside of a bend, an overlap on the
-inside. Bending the whole run instead keeps joins closed but stretches every letter on the outside of a bend and
-squashes it on the inside. text_on_path keeps letters rigid and bends only the rows they join on.
-
-**Try it in the browser: [rahiche.github.io/text_on_path](https://rahiche.github.io/text_on_path/)**: bend a curve and
-watch the joins, draw your own, type your own text, and see the seals.
+Turning each letter to the curve breaks the joins. Bending the whole line stretches the letters. text_on_path keeps
+letters rigid and bends only where they join.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/schematic.png" alt="Three ways onto a bend: each letter turned whole splits the headline into a wedge; the whole line bent closes joins but stretches every letter; only the joining rows bent closes joins and keeps letters' shape" width="720">
-</p>
-
-## Scripts
-
-<table>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_arabic.png" alt="Arabic on an arc and an S-curve" width="360"></td>
-    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_persian.png" alt="Persian on an arc and an S-curve" width="360"></td>
-  </tr>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_urdu.png" alt="Urdu, in Nastaliq, on an arc and an S-curve" width="360"></td>
-    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_hindi.png" alt="Hindi on an arc and an S-curve" width="360"></td>
-  </tr>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_bengali.png" alt="Bengali on an arc and an S-curve" width="360"></td>
-    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_latin_script.png" alt="A Latin script hand on an arc and an S-curve" width="360"></td>
-  </tr>
-</table>
-
-Seals: each phrase twice round a ring, fitted by kashida, tracking or word spacing.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/seals.png" alt="Six seals: Arabic and Persian fitted by kashida, Hindi and Bengali by tracking, Urdu and a Latin script hand by word spacing" width="720">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/schematic.png" alt="Each letter turned whole splits the headline; the whole line bent stretches the letters; only the joining rows bent keeps both" width="720">
 </p>
 
 ## Use
@@ -49,8 +22,6 @@ flutter pub add text_on_path
 ```
 
 ```dart
-import 'package:text_on_path/text_on_path.dart';
-
 TextOnPath(
   'الحروف تبقى متصلة',
   curve: PathCurve.arc(const Offset(160, 160), 120), // or PathCurve.fromPath(path)
@@ -58,115 +29,39 @@ TextOnPath(
 )
 ```
 
-`TextOnPath` fills the space it's given; the curve is in its coordinates. Text stands on the curve's left: on a
-clockwise circle it faces out, on an anticlockwise one it faces in. `position` places the middle of the text along the
-curve, as a fraction of its length.
+- `fit:` fills a length with kashida, tracking or word spacing.
+- `mode:` switches to `rigid` or `warp`, for comparison.
+- Inside a `SelectionArea`, it selects like any text: drag, double-click, handles, copy.
+- `TextOnPathPlacement.toSvg` and `toPdf` export vectors.
 
-- **Fit a length**: `fit: TextOnPathFit.kashida` (Arabic's own way: one join a word drawn out, where a calligrapher
-  would), `tracking` (joins drawn out rather than opened) or `spacing` (between words), to `fitLength`.
-- **Compare**: `mode: TextOnPathMode.rigid` turns each cluster whole, as other packages do (but shaped); `warp` bends
-  the whole run, as SVG's `textPath method="stretch"` would.
-- **Sharp at any zoom**: by default the text is drawn from an atlas drawn again for the scale it's shown at (any
-  `Transform` or `InteractiveViewer` above it, times the screen's pixel ratio), and from traced outlines past a memory
-  budget. `rendering: TextOnPathRendering.vector` always uses outlines.
+## Scripts
 
-### Selection
-
-Inside a `SelectionArea`, curved text selects like any other: drag across it, double-click a word, long-press on a
-phone for handles, and copy. A pointer is carried back to the straight line the text was shaped as, and the paragraph
-finds the position there, so right-to-left text, clusters and words come out right. The highlight bends with the curve,
-and the handles turn with it.
-
-```dart
-SelectionArea(
-  child: TextOnPath('الحروف تبقى متصلة', curve: curve, style: style),
-)
-```
+<table>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_arabic.png" alt="Arabic" width="360"></td>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_persian.png" alt="Persian" width="360"></td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_urdu.png" alt="Urdu" width="360"></td>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_hindi.png" alt="Hindi" width="360"></td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_bengali.png" alt="Bengali" width="360"></td>
+    <td><img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/gallery_latin_script.png" alt="A Latin script hand" width="360"></td>
+  </tr>
+</table>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/selection_arabic.png" alt="Arabic on an arc: a drag selects from the right, where it starts, into the second word; a long press selects تبقى with two handles turned to the curve" width="720">
-  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/selection_hindi.png" alt="Hindi on an arc: a drag selects from the start into the second word; a long press selects जुड़ी with two handles" width="720">
-  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/selection_latin_script.png" alt="A Latin script hand on an arc: a drag selects Handwriting st; a long press selects stays with two handles" width="720">
+  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/seals.png" alt="Six seals, each fitted round a ring by kashida, tracking or word spacing" width="720">
 </p>
 
-*Left, a mouse drag from the start of the text; right, a long press on a word, with handles.*
+## More
 
-### As vectors: SVG and PDF
-
-```dart
-final shaped = await ShapedText.layout('शिरोरेखा जुड़ी रहती है', style);
-final outlines = await TextOutlines.trace(shaped);
-final placement = TextOnPathPlacement(shaped, curve);
-final svg = placement.toSvg(outlines); // or placement.toPdf(outlines), placement.outlinePaths(outlines)
-```
-
-`ShapedText` shapes the text once; `TextOnPathPlacement` places it on a curve (cheap: once a frame if the curve moves)
-and paints it, from an atlas or outlines; `TextOnPathMetrics.of(placement)` measures it.
-
-## How it works
-
-1. **Shape once.** The whole run is shaped by Flutter's paragraph engine, so every script comes out right: Arabic
-   joining forms, Indic conjuncts and vowel signs, Nastaliq's slope.
-2. **Draw each cluster alone.** Each grapheme cluster is drawn with the rest of the run transparent, so it keeps its
-   exact shape and place, overhanging tails and all.
-3. **Find the joining rows.** Wherever ink crosses the boundary between two clusters, that's a join; the rows most
-   joins cross in are the script's connection line: the Arabic baseline stroke, the Indic headline.
-4. **Bend only those rows.** Each cluster is a triangle mesh (`Canvas.drawVertices`). Points in the joining rows follow
-   the curve; points away from them stand rigid with their letter; one eases into the other over 0.18 em.
-5. **Draw joins out, or pull them shut.** Where rigid letters land apart along the curve, a flat join is drawn out with
-   its own cross-section, as a tatweel would be; a sloping one is pulled shut, the pull fading out over 0.3 em.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/figures/mesh.png" alt="Three Devanagari clusters' meshes, flat and on a tight circle: the joining rows, in teal, bend and run on across the clusters; the rest of each cluster's grid stays straight and turns whole" width="720">
-</p>
-
-*Three Devanagari clusters, flat (left) and on a tight circle (right). Each cluster's grid keeps its own colour; the
-joining rows (teal) bend with the curve and run on from cluster to cluster, while the rest of each grid stays straight
-and turns whole.*
-
-## How well it works
-
-At 48 px on a circle of radius 3 em, letters facing out. **Joins**: the area, in px², between where one cluster puts
-a join's boundary and where its neighbour puts it, over the phrase. **Distortion**: how far ink moved from the nearest
-rigid placement of its letter, RMS, in px. Both measured through the mesh as drawn.
-
-| Sample | Joins, rigid | Joins, text_on_path | Distortion, plain warp | Distortion, text_on_path |
-|---|---:|---:|---:|---:|
-| Arabic (Noto Naskh Arabic) | 13 | 0 | 0.43 | 0.22 |
-| Persian (Noto Naskh Arabic) | 7.8 | 0 | 0.29 | 0.18 |
-| Urdu (Noto Nastaliq Urdu) | 62 | 0.1 | 1.32 | 0.43 |
-| Hindi (Noto Sans Devanagari) | 135 | 0 | 1.51 | 0.28 |
-| Bengali (Noto Sans Bengali) | 92 | 0 | 2.06 | 0.44 |
-| Latin script (Dancing Script) | 51 | 0.1 | 0.49 | 0.18 |
-
-Rigid placement's defects are all gaps outside a bend and all overlaps inside one. text_on_path closes them, with
-between a fifth and two thirds of a plain warp's distortion. Fitted round a whole ring, rigid placement can only open
-joins (221 px² on an Arabic seal); text_on_path draws them out. The inside of a bend, an S-curve and the seals are in
-[doc/measurements.md](https://github.com/Rahiche/text_on_path/blob/main/doc/measurements.md), and the sharpness study
-in [doc/sharpness.md](https://github.com/Rahiche/text_on_path/blob/main/doc/sharpness.md).
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Rahiche/text_on_path/main/doc/images/app_compare_end.png" alt="The example app: Hindi, Bengali and a Latin script hand on a circle and an S-curve, rigid placement beside joined, each measured, with a loupe on the widest join" width="720">
-</p>
-
-## The example app
-
-`example/` is the [gallery](https://rahiche.github.io/text_on_path/), and runs on the desktop and phones too. It shows Arabic, Persian, Urdu, Hindi, Bengali and a Latin script hand on a circle and an S-curve, rigid
-placement beside joined, measured, with a loupe on the join rigid placement opens widest; seals fitted by kashida,
-tracking or word spacing; a zoomable view that saves SVG and PDF; and selection. Its fonts are bundled under the SIL Open Font
-License.
-
-## Limits
-
-- On the inside of a bend, letters are spaced along whichever is nearer the inside, the baseline or the joining rows,
-  so joins are never squeezed. For the Indic headline, well above the baseline, that makes Hindi and Bengali about a
-  quarter longer inside a circle of radius 3 em.
-- Flutter doesn't hand back glyph outlines, so `TextOutlines` traces them from a fine raster: within a few hundredths of
-  a pixel of the font's edges at the text's size, but polygons, not the font's own curves.
-- Kashida draws a join out with the stroke's own cross-section rather than inserting U+0640 and shaping again, so a
-  font's special kashida forms don't appear.
-- The joining rows are found from the run's pixels; `connection: ConnectionLine.between(...)` sets them by hand.
+- On a 3 em circle, letter-by-letter placement leaves 8 to 135 px² of gaps at the joins. text_on_path leaves at most
+  0.1, and distorts letters a fifth to two thirds as much as a warp.
+- [How it works](https://github.com/Rahiche/text_on_path/blob/main/doc/how_it_works.md) covers the method, the
+  measurements and the limits.
 
 ## License
 
-Apache 2.0. The example's fonts are under the SIL Open Font License, Version 1.1.
+Apache 2.0. The example's fonts are under the SIL Open Font License 1.1.
